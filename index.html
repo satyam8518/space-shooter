@@ -3,8 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>एस्टेरॉइड वॉरियर्स - Asteroid Warriors</title>
-    <link rel="stylesheet" href="style.css">
+    <title>एस्टेरॉइड वॉरियर्स - सिंगल फ़ाइल</title>
+    <style>
+        /* CSS स्टाइलिंग */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Arial', sans-serif;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #gameCanvas {
+            display: block;
+            background-color: #000033; /* गहरा अंतरिक्ष */
+            border: 2px solid #33ccff;
+            box-shadow: 0 0 20px rgba(51, 204, 255, 0.5);
+        }
+
+        #game-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: center;
+            z-index: 10;
+        }
+
+        #score-display, #health-display {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin: 5px 15px;
+            display: inline-block;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        #startButton, #restartButton {
+            padding: 15px 30px;
+            font-size: 1.5em;
+            cursor: pointer;
+            background-color: #ff3366; /* लाल बटन */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 4px #cc0033;
+            transition: all 0.1s;
+        }
+        #startButton:active, #restartButton:active {
+            box-shadow: 0 0 #cc0033;
+            transform: translate(-50%, -50%) translateY(4px);
+        }
+
+        #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+    </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
@@ -12,18 +87,314 @@
     <div id="game-ui">
         <div id="score-display">स्कोर: 0</div>
         <div id="health-display">स्वास्थ्य: 100%</div>
-        <button id="startButton">गेम शुरू करें</button>
-        <div id="gameOverScreen" style="display:none;">
-            <h2>गेम ओवर!</h2>
-            <p id="finalScore"></p>
-            <button id="restartButton">दोबारा शुरू करें</button>
-        </div>
+    </div>
+    
+    <button id="startButton">गेम शुरू करें</button>
+
+    <div id="gameOverScreen" style="display:none;">
+        <h2>गेम ओवर!</h2>
+        <p id="finalScore" style="font-size: 1.5em; margin: 20px;"></p>
+        <button id="restartButton">दोबारा शुरू करें</button>
     </div>
     
     <audio id="shootSound" src="shoot.mp3" preload="auto"></audio>
     <audio id="upgradeSound" src="upgrade.mp3" preload="auto"></audio>
-    <audio id="bgMusic" src="spacemusic.mp3" loop autoplay></audio>
+    <audio id="explosionSound" src="explosion.mp3" preload="auto"></audio>
+    <audio id="bgMusic" src="spacemusic.mp3" loop></audio>
     
-    <script src="game.js"></script>
+    <script>
+        // JavaScript गेम लॉजिक
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const scoreDisplay = document.getElementById('score-display');
+        const healthDisplay = document.getElementById('health-display');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const restartButton = document.getElementById('restartButton');
+
+        // साउंड एलीमेंट्स
+        const shootSound = document.getElementById('shootSound');
+        const upgradeSound = document.getElementById('upgradeSound');
+        const explosionSound = document.getElementById('explosionSound');
+        const bgMusic = document.getElementById('bgMusic');
+
+        let gameRunning = false;
+        let score = 0;
+        let health = 100;
+        let bulletCount = 1; // 1: सिंगल फायर, 2: डबल फायर, 3: ट्रिपल फायर
+        let level = 1;
+        let lastTouchX = 0;
+
+        // --- 1. कैनवास/स्क्रीन सेटअप ---
+        function resizeCanvas() {
+            canvas.width = window.innerWidth > 600 ? 600 : window.innerWidth;
+            canvas.height = window.innerHeight > 800 ? 800 : window.innerHeight;
+            if (player) {
+                player.x = canvas.width / 2;
+                player.y = canvas.height - 60;
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        
+        // --- 2. गेम ऑब्जेक्ट्स ---
+        let player = {
+            x: 0, y: 0, width: 50, height: 50, color: 'skyblue',
+            draw: function() {
+                // रॉकेट (Triangle)
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x - this.width / 2, this.y + this.height);
+                ctx.lineTo(this.x + this.width / 2, this.y + this.height);
+                ctx.closePath();
+                ctx.fill();
+                // इंजन फायर (Thrust)
+                ctx.fillStyle = 'orange';
+                ctx.fillRect(this.x - 5, this.y + this.height, 10, 15);
+            }
+        };
+
+        let bullets = [];
+        let asteroids = [];
+        let powerups = [];
+
+        // --- 3. ऑब्जेक्ट जेनरेटर ---
+
+        // पत्थरों (Asteroids) को जनरेट करें
+        function spawnAsteroid() {
+            if (!gameRunning) return;
+            const size = Math.random() * 30 + 15; // 15 से 45 साइज
+            const speed = (Math.random() * 1.5 + 1.5) * (1 + level * 0.1); // स्पीड बढ़ती जाएगी
+            asteroids.push({
+                x: Math.random() * (canvas.width - size),
+                y: -size,
+                size: size,
+                speed: speed,
+                health: size / 10 // बड़े पत्थर को नष्ट होने में ज़्यादा समय लगेगा
+            });
+        }
+
+        // पावर-अप को जनरेट करें
+        function spawnPowerup() {
+            if (!gameRunning || Math.random() > 0.6) return; // 40% चांस
+            powerups.push({
+                x: Math.random() * (canvas.width - 20) + 10,
+                y: -20,
+                size: 20,
+                speed: 3,
+                type: 'fire' // केवल फायर अपग्रेड
+            });
+        }
+
+        // --- 4. एक्शन लॉजिक ---
+
+        // रॉकेट फायर
+        function fireBullet() {
+            if (!gameRunning) return;
+            const bulletSpeed = -15;
+            
+            if (bulletCount === 1) {
+                bullets.push({ x: player.x, y: player.y, speed: bulletSpeed });
+            } else if (bulletCount === 2) {
+                bullets.push({ x: player.x - 10, y: player.y, speed: bulletSpeed });
+                bullets.push({ x: player.x + 10, y: player.y, speed: bulletSpeed });
+            } else if (bulletCount >= 3) { // ट्रिपल फायर
+                bullets.push({ x: player.x, y: player.y, speed: bulletSpeed });
+                bullets.push({ x: player.x - 15, y: player.y, speed: bulletSpeed, angle: -5 });
+                bullets.push({ x: player.x + 15, y: player.y, speed: bulletSpeed, angle: 5 });
+            }
+
+            shootSound.currentTime = 0;
+            shootSound.play().catch(e => {}); 
+        }
+
+        // --- 5. टक्कर/कोलाइज़न चेक ---
+        function checkCollisions() {
+            // बुलेट और एस्टेरॉइड की टक्कर
+            bullets.forEach((bullet, bIndex) => {
+                asteroids.forEach((asteroid, aIndex) => {
+                    if (bullet.x > asteroid.x - asteroid.size / 2 && bullet.x < asteroid.x + asteroid.size / 2 &&
+                        bullet.y > asteroid.y - asteroid.size / 2 && bullet.y < asteroid.y + asteroid.size / 2) {
+                        
+                        // टक्कर हुई
+                        asteroid.health -= 1;
+                        bullets.splice(bIndex, 1); // गोली को हटाओ
+
+                        if (asteroid.health <= 0) {
+                            asteroids.splice(aIndex, 1); // पत्थर को हटाओ
+                            score += 10;
+                            explosionSound.currentTime = 0;
+                            explosionSound.play().catch(e => {});
+                        }
+                    }
+                });
+            });
+
+            // प्लेयर और एस्टेरॉइड की टक्कर
+            asteroids.forEach((asteroid, aIndex) => {
+                const playerHit = (player.x + 10 > asteroid.x - asteroid.size / 2 && player.x - 10 < asteroid.x + asteroid.size / 2 &&
+                                   player.y + player.height / 2 > asteroid.y - asteroid.size / 2 && player.y < asteroid.y + asteroid.size / 2);
+                if (playerHit) {
+                    health -= 20; // 20% हेल्थ लॉस
+                    healthDisplay.textContent = `स्वास्थ्य: ${Math.max(0, health)}%`;
+                    asteroids.splice(aIndex, 1); // पत्थर को हटाओ
+                    explosionSound.currentTime = 0;
+                    explosionSound.play().catch(e => {});
+
+                    if (health <= 0) {
+                        gameOver();
+                    }
+                }
+            });
+            
+            // प्लेयर और पावर-अप की टक्कर
+            powerups.forEach((powerup, pIndex) => {
+                const powerupHit = (player.x + player.width / 2 > powerup.x && player.x - player.width / 2 < powerup.x + powerup.size &&
+                                   player.y + player.height > powerup.y && player.y < powerup.y + powerup.size);
+                if (powerupHit) {
+                    powerups.splice(pIndex, 1); // पावर-अप हटाओ
+                    
+                    if (bulletCount < 3) {
+                        bulletCount++; // फायर काउंट बढ़ाओ (डबल या ट्रिपल)
+                    }
+                    upgradeSound.currentTime = 0;
+                    upgradeSound.play().catch(e => {}); 
+                }
+            });
+        }
+
+        // --- 6. गेम अपडेट और ड्रा ---
+        
+        function updateGame() {
+            // पत्थरों को मूव करें
+            asteroids.forEach(a => a.y += a.speed);
+            asteroids = asteroids.filter(a => a.y < canvas.height); // जो बाहर चले गए, उन्हें हटाओ
+
+            // गोलियों को मूव करें
+            bullets.forEach(b => b.y += b.speed);
+            bullets = bullets.filter(b => b.y > 0);
+
+            // पावर-अप को मूव करें
+            powerups.forEach(p => p.y += p.speed);
+            powerups = powerups.filter(p => p.y < canvas.height);
+            
+            // टक्कर चेक करें
+            checkCollisions();
+
+            // कठिनाई बढ़ाएँ
+            if (score > level * 100) {
+                level++;
+            }
+            
+            // UI अपडेट करें
+            scoreDisplay.textContent = `स्कोर: ${score} (लेवल: ${level})`;
+        }
+
+        function drawGame() {
+            // कैनवास साफ़ करें
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // रॉकेट ड्रा करें
+            player.draw();
+
+            // गोलियां ड्रा करें
+            ctx.fillStyle = 'yellow';
+            bullets.forEach(b => {
+                ctx.fillRect(b.x - 2, b.y, 4, 10);
+            });
+
+            // पत्थर ड्रा करें
+            ctx.fillStyle = 'sienna'; // ब्राउन/ग्रे
+            asteroids.forEach(a => {
+                ctx.beginPath();
+                ctx.arc(a.x, a.y, a.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // पावर-अप ड्रा करें
+            ctx.fillStyle = 'lime'; // नींबू हरा
+            powerups.forEach(p => {
+                ctx.font = '20px Arial';
+                ctx.fillText('⚡', p.x, p.y + p.size); // बिजली का आइकन
+            });
+        }
+
+        // --- 7. गेम लूप और कंट्रोल ---
+
+        function gameLoop() {
+            if (!gameRunning) return;
+            updateGame();
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            gameRunning = true;
+            score = 0;
+            health = 100;
+            bulletCount = 1;
+            level = 1;
+            asteroids = [];
+            bullets = [];
+            powerups = [];
+            
+            healthDisplay.textContent = `स्वास्थ्य: 100%`;
+            startButton.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            
+            // म्यूजिक प्ले करें (ब्राउज़र की पॉलिसी के कारण यह बटन क्लिक पर ही चलेगा)
+            bgMusic.currentTime = 0;
+            bgMusic.play().catch(e => console.log("Music auto-play failed.")); 
+            
+            gameLoop();
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            bgMusic.pause();
+            finalScoreDisplay.textContent = `आपका अंतिम स्कोर: ${score}`;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        // --- इंटरवल (बार-बार होने वाले इवेंट्स) ---
+        // हर 200ms पर फायर करें
+        setInterval(fireBullet, 200); 
+        // हर 800ms पर पत्थर जनरेट करें (यह लेवल बढ़ने पर और तेज हो सकता है)
+        setInterval(spawnAsteroid, 800); 
+        // हर 5 सेकंड में पावर-अप जनरेट करें
+        setInterval(spawnPowerup, 5000); 
+
+        // --- टच कंट्रोल (मोबाइल) ---
+        canvas.addEventListener('touchstart', (e) => {
+            if (gameRunning) {
+                lastTouchX = e.touches[0].clientX;
+            }
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!gameRunning) return;
+            e.preventDefault(); 
+            const touchX = e.touches[0].clientX;
+            const deltaX = touchX - lastTouchX;
+            
+            // रॉकेट को हिलाओ
+            player.x += deltaX * 1.5; // मूवमेंट सेंसिटिविटी
+
+            // रॉकेट को सीमा के अंदर रखो
+            player.x = Math.max(player.width / 2, Math.min(canvas.width - player.width / 2, player.x));
+            
+            lastTouchX = touchX;
+        });
+
+        // इवेंट लिसनर्स
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', startGame);
+        
+        // शुरुआती सेटअप
+        resizeCanvas(); 
+        player.x = canvas.width / 2;
+        player.y = canvas.height - 60;
+    </script>
 </body>
 </html>
