@@ -107,9 +107,7 @@ canvas{
 </div>
 
 <script>
-/* ===============================
-       CANVAS SETUP
-================================*/
+/* =============================== */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
@@ -120,9 +118,7 @@ const centerText = document.getElementById("centerText");
 const W = canvas.width;
 const H = canvas.height;
 
-/* ===============================
-       SHIP SETUP
-================================*/
+/* Ship */
 const ship = {
   x: W / 2,
   y: H - 80,
@@ -132,408 +128,242 @@ const ship = {
   fireLevel: 1,
   fireCooldown: 0,
   fireDelay: 220,
-  lives: 5,
-  alive: true
+  lives: 5
 };
 
-let bullets = [];
-let asteroids = [];
-let powerups = [];
-let stars = [];
-
-/* Background stars */
-for (let i = 0; i < 160; i++) {
+let bullets=[], asteroids=[], powerups=[], stars=[];
+for(let i=0;i<160;i++){
   stars.push({
-    x: Math.random() * W,
-    y: Math.random() * H,
-    r: Math.random() * 1.3 + 0.4,
-    s: Math.random() * 30 + 15
+    x:Math.random()*W,
+    y:Math.random()*H,
+    r:Math.random()*1.3+.4,
+    s:Math.random()*30+15
   });
 }
 
-let lastTime = 0;
-let score = 0;
-let wave = 1;
+let lastTime=0,score=0,wave=1,
+difficultyTimer=0,
+asteroidSpawnTimer=0,
+asteroidSpawnInterval=900,
+powerupSpawnTimer=0,
+powerupSpawnInterval=9000,
+gameRunning=false;
 
-let difficultyTimer = 0;
-let asteroidSpawnTimer = 0;
-let asteroidSpawnInterval = 900;
+/* Touch control flags */
+let leftPressed=false, rightPressed=false, firePressed=false;
 
-let powerupSpawnTimer = 0;
-let powerupSpawnInterval = 9000;
-
-let gameRunning = false;
-
-/* ===============================
-        TOUCH CONTROL FLAGS
-================================*/
-let leftPressed = false;
-let rightPressed = false;
-let firePressed = false;
-
-function bindTouch(btn, down, up) {
-  btn.addEventListener("touchstart", e => {
-    e.preventDefault(); down();
-  });
-  btn.addEventListener("touchend", e => {
-    e.preventDefault(); up();
-  });
+function bindTouch(btn,down,up){
+  btn.addEventListener("touchstart",e=>{e.preventDefault();down();});
+  btn.addEventListener("touchend",e=>{e.preventDefault();up();});
 }
 
-bindTouch(document.getElementById("leftBtn"), () => leftPressed=true, () => leftPressed=false);
-bindTouch(document.getElementById("rightBtn"), () => rightPressed=true, () => rightPressed=false);
-bindTouch(document.getElementById("fireBtn"), () => firePressed=true, () => firePressed=false);
+bindTouch(document.getElementById("leftBtn"),()=>leftPressed=true,()=>leftPressed=false);
+bindTouch(document.getElementById("rightBtn"),()=>rightPressed=true,()=>rightPressed=false);
+bindTouch(document.getElementById("fireBtn"),()=>firePressed=true,()=>firePressed=false);
 
-/* ===============================
-          START GAME
-================================*/
-function startGame() {
-  score = 0;
-  wave = 1;
-  difficultyTimer = 0;
-  asteroidSpawnInterval = 900;
+/* Start game */
+document.getElementById("fireBtn").addEventListener("click",()=>{if(!gameRunning)startGame();});
 
-  asteroids = [];
-  bullets = [];
-  powerups = [];
-
-  ship.x = W / 2;
-  ship.fireLevel = 1;
-  ship.fireCooldown = 0;
-  ship.lives = 5;
-
-  gameRunning = true;
-  centerText.style.display = "none";
-
-  lastTime = performance.now();
+function startGame(){
+  score=0; wave=1; difficultyTimer=0;
+  asteroids=[]; bullets=[]; powerups=[];
+  ship.x=W/2; ship.fireLevel=1; ship.fireCooldown=0; ship.lives=5;
+  gameRunning=true;
+  centerText.style.display="none";
+  lastTime=performance.now();
   requestAnimationFrame(loop);
 }
 
-/* Tap fire to start */
-document.getElementById("fireBtn").addEventListener("click", () => {
-  if (!gameRunning) startGame();
-});
-
-/* ===============================
-            MAIN LOOP
-================================*/
-function loop(t) {
-  if (!gameRunning) return;
-
-  let dt = t - lastTime;
-  lastTime = t;
-
-  update(dt);
-  draw();
-
+/* Main loop */
+function loop(t){
+  if(!gameRunning) return;
+  let dt=t-lastTime; lastTime=t;
+  update(dt); draw();
   requestAnimationFrame(loop);
 }
 
-/* ===============================
-            UPDATE
-================================*/
-function update(dt) {
-  let sec = dt / 1000;
-
-  /* Difficulty */
-  difficultyTimer += dt;
-  if (difficultyTimer > 12000) {
-    difficultyTimer = 0;
-    wave++;
-    asteroidSpawnInterval = Math.max(300, asteroidSpawnInterval - 80);
+/* Update */
+function update(dt){
+  let sec=dt/1000;
+  difficultyTimer+=dt;
+  if(difficultyTimer>12000){
+    difficultyTimer=0; wave++;
+    asteroidSpawnInterval=Math.max(300,asteroidSpawnInterval-80);
   }
 
-  /* Movement */
-  let move = 0;
-  if (leftPressed) move = -1;
-  if (rightPressed) move = 1;
+  let move=0;
+  if(leftPressed)move=-1;
+  if(rightPressed)move=1;
 
-  ship.x += move * ship.speed * sec;
-  ship.x = Math.max(ship.w/2, Math.min(W - ship.w/2, ship.x));
+  ship.x+=move*ship.speed*sec;
+  ship.x=Math.max(ship.w/2,Math.min(W-ship.w/2,ship.x));
 
-  /* Shooting */
-  ship.fireCooldown -= dt;
-  if (ship.fireCooldown < 0) ship.fireCooldown = 0;
+  ship.fireCooldown-=dt;
+  if(ship.fireCooldown<0)ship.fireCooldown=0;
 
-  if (firePressed && ship.fireCooldown === 0) {
-    shoot();
-    ship.fireCooldown = ship.fireDelay;
+  if(firePressed && ship.fireCooldown===0){
+    shoot(); ship.fireCooldown=ship.fireDelay;
   }
 
-  /* Spawn asteroids */
-  asteroidSpawnTimer += dt;
-  if (asteroidSpawnTimer >= asteroidSpawnInterval) {
-    asteroidSpawnTimer = 0;
-    spawnAsteroid();
+  asteroidSpawnTimer+=dt;
+  if(asteroidSpawnTimer>=asteroidSpawnInterval){
+    asteroidSpawnTimer=0; spawnAsteroid();
   }
 
-  /* Spawn powerup */
-  powerupSpawnTimer += dt;
-  if (powerupSpawnTimer >= powerupSpawnInterval) {
-    powerupSpawnTimer = 0;
-    spawnPowerup();
+  powerupSpawnTimer+=dt;
+  if(powerupSpawnTimer>=powerupSpawnInterval){
+    powerupSpawnTimer=0; spawnPowerup();
   }
 
-  /* Stars */
-  stars.forEach(s => {
-    s.y += s.s * sec * 0.1;
-    if (s.y > H) {
-      s.y = -5;
-      s.x = Math.random() * W;
-    }
-  });
+  stars.forEach(s=>{s.y+=s.s*sec*.1;if(s.y>H){s.y=-5;s.x=Math.random()*W;}});
+  bullets.forEach(b=>b.y+=b.vy*sec); bullets=bullets.filter(b=>b.y>-20);
 
-  /* Bullets */
-  bullets.forEach(b => b.y += b.vy * sec);
-  bullets = bullets.filter(b => b.y > -20);
+  asteroids.forEach(a=>{a.y+=a.vy*sec; a.rotation+=a.vrot*sec;});
+  asteroids=asteroids.filter(a=>a.y<H+60);
 
-  /* Asteroids */
-  asteroids.forEach(a => {
-    a.y += a.vy * sec;
-    a.rotation += a.vrot * sec;
-  });
-  asteroids = asteroids.filter(a => a.y < H + 60);
+  powerups.forEach(p=>p.y+=p.vy*sec);
+  powerups=powerups.filter(p=>p.y<H+30);
 
-  /* Powerups */
-  powerups.forEach(p => p.y += p.vy * sec);
-  powerups = powerups.filter(p => p.y < H + 30);
+  hitBullets(); hitShip(); hitPowerups();
 
-  handleBulletHits();
-  handleShipHits();
-  handlePowerupHits();
-
-  scoreText.textContent = "Score: " + score;
-  statusText.textContent = `Wave: ${wave} | Fire: ${ship.fireLevel}x | Lives: ${ship.lives}`;
+  scoreText.textContent="Score: "+score;
+  statusText.textContent=`Wave: ${wave} | Fire: ${ship.fireLevel}x | Lives: ${ship.lives}`;
 }
 
-/* ===============================
-          DRAW THINGS
-================================*/
-function draw() {
-  ctx.clearRect(0, 0, W, H);
-  drawBackground();
-  drawShip();
-  drawBullets();
-  drawAsteroids();
-  drawPowerups();
+/* Draw */
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawBG(); drawShip(); drawBullets(); drawAsteroids(); drawPowerups();
 }
 
-function drawBackground() {
-  let g = ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W/1.1);
+function drawBG(){
+  let g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W/1.1);
   g.addColorStop(0,"rgba(40,80,180,0.35)");
   g.addColorStop(1,"rgba(0,0,0,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0,0,W,H);
-
-  stars.forEach(s=>{
-    ctx.beginPath();
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = "#fff";
-    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-    ctx.fill();
-  });
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  stars.forEach(s=>{ctx.beginPath();ctx.globalAlpha=.5;ctx.fillStyle="#fff";ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();});
 }
 
-function drawShip() {
-  ctx.save();
-  ctx.translate(ship.x, ship.y);
-
-  /* Flame */
+function drawShip(){
+  ctx.save(); ctx.translate(ship.x,ship.y);
   ctx.beginPath();
-  ctx.moveTo(-10, ship.h/2);
-  ctx.lineTo(0, ship.h/2 + 22 + Math.random()*5);
-  ctx.lineTo(10, ship.h/2);
-  let fg = ctx.createLinearGradient(0,0,0,40);
-  fg.addColorStop(0,"yellow");
-  fg.addColorStop(1,"orange");
-  ctx.fillStyle = fg;
-  ctx.fill();
-
-  /* Body */
+  ctx.moveTo(-10,ship.h/2);
+  ctx.lineTo(0,ship.h/2+22+Math.random()*5);
+  ctx.lineTo(10,ship.h/2);
+  ctx.fillStyle="orange"; ctx.fill();
   ctx.beginPath();
   ctx.moveTo(0,-ship.h/2);
-  ctx.lineTo(-ship.w/2, ship.h/2);
-  ctx.lineTo(ship.w/2, ship.h/2);
+  ctx.lineTo(-ship.w/2,ship.h/2);
+  ctx.lineTo(ship.w/2,ship.h/2);
   ctx.closePath();
-  ctx.fillStyle="#4eb6ff";
-  ctx.fill();
-
+  ctx.fillStyle="#4eb6ff"; ctx.fill();
   ctx.restore();
 }
 
-function drawBullets() {
+function drawBullets(){
   ctx.fillStyle="yellow";
-  bullets.forEach(b=>{
-    ctx.fillRect(b.x-2, b.y-12, 4, 16);
-  });
+  bullets.forEach(b=>ctx.fillRect(b.x-2,b.y-12,4,16));
 }
 
-/* Asteroids */
-function drawAsteroids() {
+function drawAsteroids(){
   ctx.save();
-  for (const a of asteroids) {
-    ctx.translate(a.x, a.y);
-    ctx.rotate(a.rotation);
-
+  for(const a of asteroids){
+    ctx.translate(a.x,a.y); ctx.rotate(a.rotation);
     ctx.beginPath();
-    if (a.type==="small") ctx.fillStyle="#b87333";
-    else if (a.type==="medium") ctx.fillStyle="#777";
+    if(a.type==="small")ctx.fillStyle="#b87333";
+    else if(a.type==="medium")ctx.fillStyle="#777";
     else ctx.fillStyle="#442f1f";
-
-    ctx.arc(0,0,a.r,0,Math.PI*2);
-    ctx.fill();
-
+    ctx.arc(0,0,a.r,0,Math.PI*2); ctx.fill();
     ctx.setTransform(1,0,0,1,0,0);
   }
   ctx.restore();
 }
 
-function drawPowerups() {
+function drawPowerups(){
   ctx.fillStyle="cyan";
-  powerups.forEach(p=>{
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-    ctx.fill();
-  });
+  powerups.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();});
 }
 
-/* ===============================
-          SPAWN OBJECTS
-================================*/
-function spawnAsteroid() {
-  let rnd = Math.random();
-  let type, r, speed;
-
-  if (rnd < 0.45) {
-    type="small";
-    r=Math.random()*16+12;
-    speed=230;
-  } else if (rnd < 0.8) {
-    type="medium";
-    r=Math.random()*22+20;
-    speed=170;
-  } else {
-    type="big";
-    r=Math.random()*30+30;
-    speed=140;
-  }
-
+/* Spawn */
+function spawnAsteroid(){
+  let rnd=Math.random(), type,r,s;
+  if(rnd<.45){type="small";r=Math.random()*16+12;s=230;}
+  else if(rnd<.8){type="medium";r=Math.random()*22+20;s=170;}
+  else{type="big";r=Math.random()*30+30;s=140;}
   asteroids.push({
     x:Math.random()*(W-100)+50,
-    y:-30,
-    r,
-    type,
-    vy:speed + wave*18,
+    y:-30, r,type,
+    vy:s+wave*18,
     rotation:0,
     vrot:(Math.random()*2-1)*1.2
   });
 }
 
-function spawnPowerup() {
-  powerups.push({
-    x:Math.random()*(W-80)+40,
-    y:-30,
-    r:16,
-    vy:140
-  });
+function spawnPowerup(){
+  powerups.push({x:Math.random()*(W-80)+40,y:-30,r:16,vy:140});
 }
 
-function shoot() {
-  let offs = {
-    1:[0],
-    2:[-14,14],
-    3:[-18,0,18],
-    4:[-22,-8,8,22]
-  }[ship.fireLevel];
-
-  offs.forEach(o=>{
-    bullets.push({x:ship.x+o, y:ship.y-ship.h/2, vy:-520});
-  });
+function shoot(){
+  let p={1:[0],2:[-14,14],3:[-18,0,18],4:[-22,-8,8,22]}[ship.fireLevel];
+  p.forEach(o=> bullets.push({x:ship.x+o,y:ship.y-ship.h/2,vy:-520}));
 }
 
-/* ===============================
-          COLLISIONS
-================================*/
+/* Collisions */
 function rectCircleCollide(rx,ry,rw,rh,cx,cy,cr){
-  let testX=Math.max(rx,Math.min(cx,rx+rw));
-  let testY=Math.max(ry,Math.min(cy,ry+rh));
-  let dx=cx-testX, dy=cy-testY;
+  let tx=Math.max(rx,Math.min(cx,rx+rw)), ty=Math.max(ry,Math.min(cy,ry+rh));
+  let dx=cx-tx, dy=cy-ty;
   return dx*dx+dy*dy <= cr*cr;
 }
 
-function handleBulletHits() {
-  for (let i=asteroids.length-1;i>=0;i--){
-    for (let j=bullets.length-1;j>=0;j--){
+function hitBullets(){
+  for(let i=asteroids.length-1;i>=0;i--){
+    for(let j=bullets.length-1;j>=0;j--){
       let a=asteroids[i], b=bullets[j];
       if(rectCircleCollide(b.x-2,b.y-12,4,16,a.x,a.y,a.r)){
-        asteroids.splice(i,1);
-        bullets.splice(j,1);
-        score+=10;
-        break;
+        asteroids.splice(i,1); bullets.splice(j,1); score+=10; break;
       }
     }
   }
 }
 
-function handleShipHits() {
-  for (let i=asteroids.length-1;i>=0;i--){
+function hitShip(){
+  for(let i=asteroids.length-1;i>=0;i--){
     let a=asteroids[i];
-    if(rectCircleCollide(
-      ship.x-ship.w/2,
-      ship.y-ship.h/2,
-      ship.w,ship.h,
-      a.x,a.y,a.r
-    )){
-      asteroids.splice(i,1);
-      ship.lives--;
-      if(ship.lives<=0){ gameOver(); }
-      return;
+    if(rectCircleCollide(ship.x-ship.w/2,ship.y-ship.h/2,ship.w,ship.h,a.x,a.y,a.r)){
+      asteroids.splice(i,1); ship.lives--; if(ship.lives<=0)return gameOver(); return;
     }
   }
 }
 
-function handlePowerupHits() {
-  for (let i=powerups.length-1;i>=0;i--){
+function hitPowerups(){
+  for(let i=powerups.length-1;i>=0;i--){
     let p=powerups[i];
-    if(rectCircleCollide(
-      ship.x-ship.w/2,
-      ship.y-ship.h/2,
-      ship.w,ship.h,
-      p.x,p.y,p.r
-    )){
-      powerups.splice(i,1);
-      if(ship.fireLevel<4) ship.fireLevel++;
+    if(rectCircleCollide(ship.x-ship.w/2,ship.y-ship.h/2,ship.w,ship.h,p.x,p.y,p.r)){
+      powerups.splice(i,1); if(ship.fireLevel<4) ship.fireLevel++;
     }
   }
 }
 
-/* ===============================
-            GAME OVER
-================================*/
-function gameOver() {
+function gameOver(){
   gameRunning=false;
   centerText.style.display="block";
-  centerText.innerHTML =
-    "GAME OVER<br>Score: "+score+"<br><small>Tap 🔥 to Restart</small>";
+  centerText.innerHTML=`
+    GAME OVER<br>
+    Score: ${score}<br>
+    <small>Tap 🔥 to Restart</small>
+  `;
 }
 
-/* Idle animation */
+/* Idle background animation */
 (function idle(){
   let last=performance.now();
   function frame(t){
     if(gameRunning)return;
     let dt=t-last; last=t;
-
     let sec=dt/1000;
-    stars.forEach(s=>{
-      s.y += s.s*sec*0.05;
-      if(s.y>H){s.y=-5;s.x=Math.random()*W;}
-    });
-
+    stars.forEach(s=>{s.y+=s.s*sec*.05;if(s.y>H){s.y=-5;s.x=Math.random()*W;}});
     ctx.clearRect(0,0,W,H);
-    drawBackground();
-    drawShip();
-
+    drawBG(); drawShip();
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
